@@ -1,46 +1,18 @@
-// Identity‑AI Smart HUD
-// Auto‑responds in Local Chat + IM
-// Backend: https://identity-ai-sl.onrender.com/api/hud
+// Identity-AI Smart HUD
+// Auto-responds in Local Chat + IM
 
 string BASE_URL = "https://identity-ai-sl.onrender.com/api/hud";
-integer DEBUG   = TRUE;
 
-// Local chat listen channel
+integer DEBUG = TRUE;
+
 integer CHAT_CHANNEL = 0;
-
-// Private channel for owner text input
 integer INPUT_CHANNEL = -777777;
 
-// Max distance for auto‑response
 float MAX_RANGE = 15.0;
 
-key lastReq;
+// Track multiple requests
+list pendingRequests = [];
 
-// -----------------------------
-// JSON Helpers
-// -----------------------------
-string buildJSON(string avatar, string message)
-{
-    message = llEscapeURL(message);
-    return "{\"avatar_id\":\"" + avatar + "\",\"message\":\"" + message + "\"}";
-}
-
-string json_extract(string body, string key)
-{
-    string pattern = "\"" + key + "\":\"";
-    integer start = llSubStringIndex(body, pattern);
-    if (start == -1) return "";
-
-    start += llStringLength(pattern);
-    integer end = llSubStringIndex(llGetSubString(body, start, -1), "\"");
-    if (end == -1) return "";
-
-    return llGetSubString(body, start, start + end - 1);
-}
-
-// -----------------------------
-// LSL Events
-// -----------------------------
 default
 {
     state_entry()
@@ -48,80 +20,144 @@ default
         llListen(CHAT_CHANNEL, "", NULL_KEY, "");
         llListen(INPUT_CHANNEL, "", llGetOwner(), "");
 
-        llSetText("Identity‑AI HUD\nTouch to chat ✨", <0.6,0.8,1.0>, 1.0);
+        llSetText(
+            "Identity-AI HUD\nTouch to chat",
+            <0.6,0.8,1.0>,
+            1.0
+        );
 
         if (DEBUG)
-            llOwnerSay("Identity‑AI Smart HUD active.");
+        {
+            llOwnerSay("Identity-AI Smart HUD active.");
+        }
     }
 
-    touch_start(integer n)
+    touch_start(integer total_number)
     {
         if (llDetectedKey(0) == llGetOwner())
-            llTextBox(llGetOwner(), "Ask Identity‑AI:", INPUT_CHANNEL);
+        {
+            llTextBox(
+                llGetOwner(),
+                "Ask Identity-AI:",
+                INPUT_CHANNEL
+            );
+        }
     }
 
-    // -----------------------------
-    // LOCAL CHAT + OWNER TEXTBOX
-    // -----------------------------
     listen(integer channel, string name, key id, string msg)
     {
         key owner = llGetOwner();
 
-        // Owner text input → always allowed
         if (channel == INPUT_CHANNEL && id == owner)
         {
-            string json = buildJSON((string)owner, msg);
+            string payload =
+                llList2Json(
+                    JSON_OBJECT,
+                    [
+                        "avatar_id",
+                        (string)owner,
 
-            if (DEBUG)
-                llOwnerSay("Sending (owner): " + json);
+                        "message",
+                        msg
+                    ]
+                );
 
-            lastReq = llHTTPRequest(
+            key req = llHTTPRequest(
                 BASE_URL,
-                ["Content-Type","application/json"],
-                json
+                [
+                    HTTP_METHOD,
+                    "POST",
+                    HTTP_MIMETYPE,
+                    "application/json"
+                ],
+                payload
             );
 
-            llOwnerSay("AI is thinking…");
+            pendingRequests += [req];
+
+            llOwnerSay("AI is thinking...");
             return;
         }
 
-        // Local chat → ignore owner
-        if (id == owner) return;
+        if (id == owner)
+        {
+            return;
+        }
 
-        // Ignore objects
-        if (llGetAgentSize(id) == ZERO_VECTOR) return;
+        if (llGetAgentSize(id) == ZERO_VECTOR)
+        {
+            return;
+        }
 
-        // Distance filter
-        float dist = llVecDist(llGetPos(), llList2Vector(llGetObjectDetails(id, [OBJECT_POS]), 0));
-        if (dist > MAX_RANGE) return;
+        if (msg == "")
+        {
+            return;
+        }
 
-        // Ignore empty messages
-        if (msg == "") return;
+        vector avatarPos =
+            llList2Vector(
+                llGetObjectDetails(
+                    id,
+                    [OBJECT_POS]
+                ),
+                0
+            );
 
-        // Build JSON
-        string json = buildJSON((string)id, msg);
+        float dist =
+            llVecDist(
+                llGetPos(),
+                avatarPos
+            );
 
-        if (DEBUG)
-            llOwnerSay("Sending (local): " + json);
+        if (dist > MAX_RANGE)
+        {
+            return;
+        }
 
-        lastReq = llHTTPRequest(
+        string payload =
+            llList2Json(
+                JSON_OBJECT,
+                [
+                    "avatar_id",
+                    (string)id,
+
+                    "message",
+                    msg
+                ]
+            );
+
+        key req = llHTTPRequest(
             BASE_URL,
-            ["Content-Type","application/json"],
-            json
+            [
+                HTTP_METHOD,
+                "POST",
+                HTTP_MIMETYPE,
+                "application/json"
+            ],
+            payload
         );
+
+        pendingRequests += [req];
     }
 
-    // -----------------------------
-    // HTTP RESPONSE
-    // -----------------------------
     http_response(key req, integer status, list meta, string body)
     {
-        if (req != lastReq)
+        integer idx = llListFindList(
+            pendingRequests,
+            [req]
+        );
+
+        if (idx == -1)
         {
-            if (DEBUG)
-                llOwnerSay("Ignoring old response.");
             return;
         }
+
+        pendingRequests =
+            llDeleteSubList(
+                pendingRequests,
+                idx,
+                idx
+            );
 
         if (DEBUG)
         {
@@ -131,26 +167,39 @@ default
 
         if (status == 200)
         {
-            string reply = json_extract(body, "reply");
-            reply = llUnescapeURL(reply);
+            string reply =
+                llJsonGetValue(
+                    body,
+                    ["reply"]
+                );
 
-            if (reply != "")
+            if (
+                reply != "" &&
+                reply != JSON_INVALID
+            )
             {
-                // Speak in local chat
                 llSay(0, reply);
             }
             else
             {
-                llOwnerSay("AI replied but parsing failed.");
+                llOwnerSay(
+                    "AI replied but response parsing failed."
+                );
             }
         }
         else if (status == 429)
         {
-            llOwnerSay("Identity‑AI: Daily limit reached (30 messages).");
+            llOwnerSay(
+                "Identity-AI: Daily limit reached."
+            );
         }
         else
         {
-            llOwnerSay("Identity‑AI error (" + (string)status + "): " + body);
+            llOwnerSay(
+                "Identity-AI error (" +
+                (string)status +
+                ")"
+            );
         }
     }
 }
