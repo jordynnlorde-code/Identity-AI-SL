@@ -1,62 +1,63 @@
 import sqlite3
-from datetime import datetime
+import time
 
-DB_PATH = "hud_limits.db"
-DAILY_LIMIT = 30
-
-def _conn():
-    return sqlite3.connect(DB_PATH)
+DB = "hud_limits.db"
 
 def init_db():
-    conn = _conn()
+    conn = sqlite3.connect(DB)
     c = conn.cursor()
     c.execute("""
         CREATE TABLE IF NOT EXISTS limits (
-            avatar_id TEXT,
-            date TEXT,
-            count INTEGER,
-            PRIMARY KEY (avatar_id, date)
+            avatar TEXT PRIMARY KEY,
+            used INTEGER,
+            day INTEGER
         )
     """)
     conn.commit()
     conn.close()
 
-def _today():
-    return datetime.utcnow().strftime("%Y-%m-%d")
+init_db()
 
-def get_remaining(avatar_id: str) -> int:
-    conn = _conn()
+def get_today():
+    return int(time.strftime("%Y%m%d"))
+
+def get_used_today():
+    conn = sqlite3.connect(DB)
     c = conn.cursor()
-    c.execute("SELECT count FROM limits WHERE avatar_id=? AND date=?", (avatar_id, _today()))
-    row = c.fetchone()
-    used = row[0] if row else 0
+    today = get_today()
+    c.execute("SELECT SUM(used) FROM limits WHERE day=?", (today,))
+    result = c.fetchone()[0]
     conn.close()
-    return max(0, DAILY_LIMIT - used)
+    return result or 0
 
-def consume(avatar_id: str):
-    conn = _conn()
+def consume(avatar):
+    conn = sqlite3.connect(DB)
     c = conn.cursor()
-    date = _today()
+    today = get_today()
 
-    c.execute("SELECT count FROM limits WHERE avatar_id=? AND date=?", (avatar_id, date))
+    c.execute("SELECT used, day FROM limits WHERE avatar=?", (avatar,))
     row = c.fetchone()
-    used = row[0] if row else 0
 
-    if used >= DAILY_LIMIT:
+    if not row:
+        c.execute("INSERT INTO limits VALUES (?, ?, ?)", (avatar, 1, today))
+        conn.commit()
+        conn.close()
+        return True, 29
+
+    used, day = row
+
+    if day != today:
+        c.execute("UPDATE limits SET used=?, day=? WHERE avatar=?", (1, today, avatar))
+        conn.commit()
+        conn.close()
+        return True, 29
+
+    if used >= 30:
         conn.close()
         return False, 0
 
-    new_count = used + 1
-    c.execute("""
-        INSERT INTO limits (avatar_id, date, count)
-        VALUES (?, ?, ?)
-        ON CONFLICT(avatar_id, date)
-        DO UPDATE SET count=excluded.count
-    """, (avatar_id, date, new_count))
+    used += 1
+    c.execute("UPDATE limits SET used=? WHERE avatar=?", (used, avatar))
     conn.commit()
     conn.close()
-
-    remaining = max(0, DAILY_LIMIT - new_count)
-    return True, remaining
-
-init_db()
+    return True, 30 - used

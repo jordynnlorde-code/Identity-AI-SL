@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Identity‑AI Admin Dashboard</title>
+    <style>
+        body {
+            background: #0d0d0d;
+            color: #e6e6e6;
+            font-family: Arial, sans-serif;
+            padding: 40px;
+        }
+        h1 { color: #6cf; }
+        .section {
+            background: #1a1a1a;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+            border: 1px solid #333;
+        }
+        .ok { color: #6f6; font-weight: bold; }
+        .fail { color: #f66; font-weight: bold; }
+        .title {
+            font-size: 22px;
+            margin-bottom: 10px;
+            color: #9cf;
+        }
+        .log-box {
+            background: #111;
+            padding: 10px;
+            border-radius: 6px;
+            height: 200px;
+            overflow-y: auto;
+            border: 1px solid #333;
+            font-family: monospace;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+
+<h1>Identity‑AI Admin Dashboard</h1>
+<p>Live backend monitoring for Identity‑AI‑SL.</p>
+
+<div class="section">
+    <div class="title">Backend Status</div>
+    <p id="backend">Checking…</p>
+</div>
+
+<div class="section">
+    <div class="title">Groq API</div>
+    <p id="groq">Checking…</p>
+</div>
+
+<div class="section">
+    <div class="title">Memory File</div>
+    <p id="memory">Checking…</p>
+</div>
+
+<div class="section">
+    <div class="title">Rate‑Limit Usage</div>
+    <p id="rate">Loading…</p>
+</div>
+
+<div class="section">
+    <div class="title">Recent Requests</div>
+    <div id="logs" class="log-box">Loading logs…</div>
+</div>
+
+<script>
+async function load(endpoint, elementId, formatter = null) {
+    try {
+        const res = await fetch(endpoint);
+        const data = await res.json();
+
+        if (formatter) {
+            document.getElementById(elementId).innerHTML = formatter(data);
+        } else {
+            document.getElementById(elementId).innerHTML =
+                `<span class="ok">OK</span> — ${JSON.stringify(data)}`;
+        }
+    } catch (e) {
+        document.getElementById(elementId).innerHTML =
+            `<span class="fail">FAIL</span>`;
+    }
+}
+
+async function loadLogs() {
+    try {
+        const res = await fetch("/api/logs");
+        const data = await res.json();
+        document.getElementById("logs").innerText = data.join("\n");
+    } catch {
+        document.getElementById("logs").innerText = "Failed to load logs.";
+    }
+}
+
+async function loadRate() {
+    try {
+        const res = await fetch("/api/rate");
+        const data = await res.json();
+        document.getElementById("rate").innerHTML =
+            `Used: ${data.used} / ${data.limit} (Remaining: ${data.remaining})`;
+    } catch {
+        document.getElementById("rate").innerHTML = "Failed to load rate data.";
+    }
+}
+
+function refresh() {
+    load("/status", "backend");
+    load("/status/groq", "groq");
+    load("/status/memory", "memory");
+    loadRate();
+    loadLogs();
+}
+
+refresh();
+setInterval(refresh, 5000);
+</script>
+
+</body>
+</html>
