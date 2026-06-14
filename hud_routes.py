@@ -21,27 +21,11 @@ def hud_chat():
             "limit": 30
         }), 429
 
-    try:
-        reply = groq_chat(message)
-    except Exception as e:
-        return jsonify({"error": "Groq error", "details": str(e)}), 500
+    reply = groq_chat(message)
 
     return jsonify({
         "avatar_id": avatar_id,
         "reply": reply,
-        "remaining": remaining,
-        "limit": 30
-    })
-
-@hud.route("/api/hud/remaining", methods=["GET"])
-def hud_remaining():
-    avatar_id = request.args.get("avatar_id")
-    if not avatar_id:
-        return jsonify({"error": "avatar_id required"}), 400
-
-    remaining = get_remaining(avatar_id)
-    return jsonify({
-        "avatar_id": avatar_id,
         "remaining": remaining,
         "limit": 30
     })

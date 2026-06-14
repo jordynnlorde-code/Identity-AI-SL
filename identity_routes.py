@@ -12,7 +12,4 @@ def identity_chat():
         return jsonify({"error": "message required"}), 400
 
     reply = groq_chat(message)
-
-    return jsonify({
-        "reply": reply
-    })
+    return jsonify({"reply": reply})
