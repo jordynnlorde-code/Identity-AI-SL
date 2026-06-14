@@ -9,10 +9,10 @@ hud = Blueprint("hud", __name__)
 
 @hud.route("/api/hud", methods=["POST"])
 def hud_chat():
-    data = request.json or {}
+    data = request.get_json(silent=True) or {}
 
-    avatar_id = data.get("avatar_id")
-    message = data.get("message")
+    avatar_id = str(data.get("avatar_id", "")).strip()
+    message = str(data.get("message", "")).strip()
 
     if not avatar_id or not message:
         return jsonify({
