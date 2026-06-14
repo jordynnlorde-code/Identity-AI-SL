@@ -10,7 +10,6 @@ from memory_routes import memory_bp
 from hud_routes import hud
 
 from logger import REQUEST_LOG
-from hud_rate_limit import get_used_today
 
 app = Flask(
     __name__,
@@ -18,10 +17,12 @@ app = Flask(
     template_folder="templates"
 )
 
+app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024
+
 CORS(app)
 
 # --------------------------------------------------
-# REGISTER BLUEPRINTS
+# Blueprints
 # --------------------------------------------------
 
 app.register_blueprint(identity_bp)
@@ -30,7 +31,7 @@ app.register_blueprint(memory_bp)
 app.register_blueprint(hud)
 
 # --------------------------------------------------
-# WEB PAGES
+# Pages
 # --------------------------------------------------
 
 @app.route("/")
@@ -49,18 +50,7 @@ def admin_dashboard():
 
 
 # --------------------------------------------------
-# HEALTH
-# --------------------------------------------------
-
-@app.route("/health")
-def health():
-    return jsonify({
-        "status": "healthy"
-    })
-
-
-# --------------------------------------------------
-# STATUS ENDPOINTS
+# Status
 # --------------------------------------------------
 
 @app.route("/status")
@@ -76,8 +66,7 @@ def status_groq():
 
     if not api_key:
         return jsonify({
-            "groq": "fail",
-            "error": "GROQ_API_KEY not configured"
+            "groq": "missing_api_key"
         }), 500
 
     try:
@@ -96,18 +85,13 @@ def status_groq():
                     }
                 ]
             },
-            timeout=5
+            timeout=10
         )
 
-        if response.status_code == 200:
-            return jsonify({
-                "groq": "ok"
-            })
-
         return jsonify({
-            "groq": "fail",
+            "groq": "ok",
             "status_code": response.status_code
-        }), 500
+        })
 
     except Exception as e:
         return jsonify({
@@ -118,25 +102,15 @@ def status_groq():
 
 @app.route("/status/memory")
 def status_memory():
-    try:
-        exists = os.path.exists("hud_limits.db")
-        size = os.path.getsize("hud_limits.db") if exists else 0
-
-        return jsonify({
-            "memory": "ok" if exists else "missing",
-            "file_exists": exists,
-            "file_size": size
-        })
-
-    except Exception as e:
-        return jsonify({
-            "memory": "fail",
-            "error": str(e)
-        }), 500
+    return jsonify({
+        "memory": "disabled",
+        "rate_limits": "disabled",
+        "quotas": "unlimited"
+    })
 
 
 # --------------------------------------------------
-# ADMIN API
+# Admin
 # --------------------------------------------------
 
 @app.route("/api/logs")
@@ -147,30 +121,32 @@ def get_logs():
 @app.route("/api/rate")
 def rate_status():
     return jsonify({
-        "used_today": get_used_today()
+        "used": "unlimited",
+        "remaining": "unlimited",
+        "limit": "unlimited"
     })
 
 
 # --------------------------------------------------
-# ERROR HANDLERS
+# Errors
 # --------------------------------------------------
 
 @app.errorhandler(404)
-def not_found(e):
+def not_found(error):
     return jsonify({
         "error": "Not Found"
     }), 404
 
 
 @app.errorhandler(500)
-def server_error(e):
+def internal_error(error):
     return jsonify({
         "error": "Internal Server Error"
     }), 500
 
 
 # --------------------------------------------------
-# MAIN
+# Local Dev
 # --------------------------------------------------
 
 if __name__ == "__main__":

@@ -58,8 +58,8 @@
 </div>
 
 <div class="section">
-    <div class="title">Rate‑Limit Usage</div>
-    <p id="rate">Loading…</p>
+    <div class="title">Usage</div>
+    <p id="rate">Unlimited</p>
 </div>
 
 <div class="section">
@@ -96,14 +96,8 @@ async function loadLogs() {
 }
 
 async function loadRate() {
-    try {
-        const res = await fetch("/api/rate");
-        const data = await res.json();
-        document.getElementById("rate").innerHTML =
-            `Used: ${data.used} / ${data.limit} (Remaining: ${data.remaining})`;
-    } catch {
-        document.getElementById("rate").innerHTML = "Failed to load rate data.";
-    }
+    document.getElementById("rate").innerHTML =
+        "Unlimited requests enabled";
 }
 
 function refresh() {
