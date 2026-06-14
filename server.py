@@ -10,6 +10,8 @@ from relay_routes import relay_bp
 from memory_routes import memory_bp
 from hud_routes import hud
 from hud_rate_limit import get_used_today
+from logger import REQUEST_LOG, log_request
+
 
 # -----------------------------
 # GLOBAL REQUEST LOG
@@ -93,9 +95,12 @@ def status_memory():
 # -----------------------------
 # ADMIN API
 # -----------------------------
+from logger import REQUEST_LOG
+
 @app.route("/api/logs")
 def get_logs():
     return jsonify(REQUEST_LOG)
+
 
 @app.route("/api/rate")
 def rate_status():

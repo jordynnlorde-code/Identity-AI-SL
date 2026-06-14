@@ -1,7 +1,8 @@
 from flask import Blueprint, request, jsonify
 from groq_client import groq_chat
 from hud_rate_limit import consume
-from server import log_request
+from logger import log_request
+
 
 hud = Blueprint("hud", __name__)
 
