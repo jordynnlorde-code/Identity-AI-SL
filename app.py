@@ -1,19 +1,12 @@
 import os
 from flask import Flask, jsonify
 from flask_cors import CORS
-
-from identity_routes import identity_bp
-from relay_routes import relay_bp
-from memory_routes import memory_bp
 from hud_routes import hud  # NEW HUD ENDPOINT
 
 app = Flask(__name__)
 CORS(app)
 
 # Register blueprints
-app.register_blueprint(identity_bp)
-app.register_blueprint(relay_bp)
-app.register_blueprint(memory_bp)
 app.register_blueprint(hud)  # HUD now active
 
 @app.route("/")
