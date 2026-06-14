@@ -1,4 +1,4 @@
-string BASE_URL = "https://identity-ai-sl.onrender.com/api/hud";
+string BASE_URL = "https://essence-media.co.uk/api/hud";
 integer CHANNEL = 7777;
 integer DEBUG = TRUE;
 
