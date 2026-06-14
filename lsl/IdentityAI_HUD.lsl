@@ -1,5 +1,6 @@
 // Identity-AI Smart HUD
-// Auto-responds in Local Chat + IM
+// Auto-responds in Local Chat + Owner Textbox
+// Backend: https://identity-ai-sl.onrender.com/api/hud
 
 string BASE_URL = "https://identity-ai-sl.onrender.com/api/hud";
 
@@ -10,7 +11,10 @@ integer INPUT_CHANNEL = -777777;
 
 float MAX_RANGE = 15.0;
 
-// Track multiple requests
+// Prevent excessive concurrent requests
+integer MAX_PENDING = 20;
+
+// Track pending HTTP requests
 list pendingRequests = [];
 
 default
@@ -22,7 +26,7 @@ default
 
         llSetText(
             "Identity-AI HUD\nTouch to chat",
-            <0.6,0.8,1.0>,
+            <0.6, 0.8, 1.0>,
             1.0
         );
 
@@ -48,30 +52,40 @@ default
     {
         key owner = llGetOwner();
 
+        // Prevent flooding
+        if (llGetListLength(pendingRequests) >= MAX_PENDING)
+        {
+            if (DEBUG)
+            {
+                llOwnerSay("Too many pending requests. Please wait.");
+            }
+            return;
+        }
+
+        // ----------------------------------------------------
+        // OWNER TEXTBOX
+        // ----------------------------------------------------
         if (channel == INPUT_CHANNEL && id == owner)
         {
             string payload =
                 llList2Json(
                     JSON_OBJECT,
                     [
-                        "avatar_id",
-                        (string)owner,
-
-                        "message",
-                        msg
+                        "avatar_id", (string)owner,
+                        "message", msg
                     ]
                 );
 
-            key req = llHTTPRequest(
-                BASE_URL,
-                [
-                    HTTP_METHOD,
-                    "POST",
-                    HTTP_MIMETYPE,
-                    "application/json"
-                ],
-                payload
-            );
+            key req =
+                llHTTPRequest(
+                    BASE_URL,
+                    [
+                        HTTP_METHOD, "POST",
+                        HTTP_MIMETYPE, "application/json",
+                        HTTP_VERIFY_CERT, TRUE
+                    ],
+                    payload
+                );
 
             pendingRequests += [req];
 
@@ -79,21 +93,35 @@ default
             return;
         }
 
+        // ----------------------------------------------------
+        // LOCAL CHAT FILTERING
+        // ----------------------------------------------------
+
+        // Ignore owner
         if (id == owner)
         {
             return;
         }
 
+        // Ignore objects
         if (llGetAgentSize(id) == ZERO_VECTOR)
         {
             return;
         }
 
+        // Ignore empty messages
         if (msg == "")
         {
             return;
         }
 
+        // Prevent AI-to-AI chat loops
+        if (llSubStringIndex(msg, "[AI]") == 0)
+        {
+            return;
+        }
+
+        // Distance filter
         vector avatarPos =
             llList2Vector(
                 llGetObjectDetails(
@@ -114,38 +142,52 @@ default
             return;
         }
 
+        // Build JSON payload
         string payload =
             llList2Json(
                 JSON_OBJECT,
                 [
-                    "avatar_id",
-                    (string)id,
-
-                    "message",
-                    msg
+                    "avatar_id", (string)id,
+                    "message", msg
                 ]
             );
 
-        key req = llHTTPRequest(
-            BASE_URL,
-            [
-                HTTP_METHOD,
-                "POST",
-                HTTP_MIMETYPE,
-                "application/json"
-            ],
-            payload
-        );
+        if (DEBUG)
+        {
+            llOwnerSay(
+                "Sending message from " +
+                name +
+                ": " +
+                msg
+            );
+        }
+
+        key req =
+            llHTTPRequest(
+                BASE_URL,
+                [
+                    HTTP_METHOD, "POST",
+                    HTTP_MIMETYPE, "application/json",
+                    HTTP_VERIFY_CERT, TRUE
+                ],
+                payload
+            );
 
         pendingRequests += [req];
     }
 
-    http_response(key req, integer status, list meta, string body)
+    http_response(
+        key req,
+        integer status,
+        list meta,
+        string body
+    )
     {
-        integer idx = llListFindList(
-            pendingRequests,
-            [req]
-        );
+        integer idx =
+            llListFindList(
+                pendingRequests,
+                [req]
+            );
 
         if (idx == -1)
         {
@@ -161,45 +203,110 @@ default
 
         if (DEBUG)
         {
-            llOwnerSay("STATUS: " + (string)status);
-            llOwnerSay("BODY: " + body);
+            llOwnerSay(
+                "HTTP Status: " +
+                (string)status
+            );
+
+            llOwnerSay(
+                "Response: " +
+                body
+            );
         }
 
+        // ----------------------------------------------------
+        // SUCCESS
+        // ----------------------------------------------------
         if (status == 200)
         {
+            string error =
+                llJsonGetValue(
+                    body,
+                    ["error"]
+                );
+
+            if (
+                error != JSON_INVALID &&
+                error != ""
+            )
+            {
+                llOwnerSay(error);
+                return;
+            }
+
             string reply =
                 llJsonGetValue(
                     body,
                     ["reply"]
                 );
 
+            string remaining =
+                llJsonGetValue(
+                    body,
+                    ["remaining"]
+                );
+
             if (
-                reply != "" &&
-                reply != JSON_INVALID
+                reply != JSON_INVALID &&
+                reply != ""
             )
             {
-                llSay(0, reply);
+                // Prefix prevents HUD feedback loops
+                llSay(
+                    0,
+                    "[AI] " + reply
+                );
+
+                if (
+                    remaining != JSON_INVALID &&
+                    remaining != ""
+                )
+                {
+                    llOwnerSay(
+                        "Remaining requests today: " +
+                        remaining
+                    );
+                }
             }
             else
             {
                 llOwnerSay(
-                    "AI replied but response parsing failed."
+                    "AI response parsing failed."
                 );
             }
+
+            return;
         }
-        else if (status == 429)
+
+        // ----------------------------------------------------
+        // RATE LIMIT
+        // ----------------------------------------------------
+        if (status == 429)
         {
             llOwnerSay(
                 "Identity-AI: Daily limit reached."
             );
+            return;
         }
-        else
+
+        // ----------------------------------------------------
+        // BACKEND ERRORS
+        // ----------------------------------------------------
+        if (status >= 500)
         {
             llOwnerSay(
-                "Identity-AI error (" +
-                (string)status +
-                ")"
+                "Identity-AI backend is temporarily unavailable."
             );
+            return;
         }
+
+        // ----------------------------------------------------
+        // OTHER ERRORS
+        // ----------------------------------------------------
+        llOwnerSay(
+            "Identity-AI error (" +
+            (string)status +
+            ")"
+        );
     }
 }
