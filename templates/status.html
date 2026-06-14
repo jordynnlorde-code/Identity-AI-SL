@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Identity‑AI Status</title>
+    <style>
+        body { font-family: Arial, sans-serif; background: #111; color: #eee; padding: 40px; }
+        h1 { color: #6cf; }
+        .section { background: #222; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+        .ok { color: #6f6; }
+        .fail { color: #f66; }
+    </style>
+</head>
+<body>
+    <h1>Identity‑AI Backend Status</h1>
+
+    <div class="section">
+        <h2>Backend</h2>
+        <p id="backend">Checking…</p>
+    </div>
+
+    <div class="section">
+        <h2>Groq API</h2>
+        <p id="groq">Checking…</p>
+    </div>
+
+    <div class="section">
+        <h2>Memory File</h2>
+        <p id="memory">Checking…</p>
+    </div>
+
+    <script>
+        async function check(endpoint, elementId) {
+            try {
+                const res = await fetch(endpoint);
+                const data = await res.json();
+                document.getElementById(elementId).innerHTML =
+                    `<span class="ok">OK</span> — ${JSON.stringify(data)}`;
+            } catch (e) {
+                document.getElementById(elementId).innerHTML =
+                    `<span class="fail">FAIL</span>`;
+            }
+        }
+
+        check("/status", "backend");
+        check("/status/groq", "groq");
+        check("/status/memory", "memory");
+    </script>
+</body>
+</html>
