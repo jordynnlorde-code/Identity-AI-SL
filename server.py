@@ -1,37 +1,25 @@
 import os
-import sqlite3
 import requests
-import time
 from flask import Flask, jsonify, render_template
 from flask_cors import CORS
 
+# Blueprints
 from identity_routes import identity_bp
 from relay_routes import relay_bp
 from memory_routes import memory_bp
 from hud_routes import hud
-from hud_rate_limit import get_used_today
+
+# Logger
 from logger import REQUEST_LOG, log_request
 
+# Rate limit summary
+from hud_rate_limit import get_used_today
 
-# -----------------------------
-# GLOBAL REQUEST LOG
-# -----------------------------
-REQUEST_LOG = []
-
-def log_request(data):
-    timestamp = time.strftime("%H:%M:%S")
-    REQUEST_LOG.append(f"[{timestamp}] {data}")
-    if len(REQUEST_LOG) > 50:
-        REQUEST_LOG.pop(0)
-
-# -----------------------------
-# FLASK APP
-# -----------------------------
 app = Flask(__name__, static_folder="static", template_folder="templates")
 CORS(app)
 
 # -----------------------------
-# BLUEPRINTS
+# REGISTER BLUEPRINTS
 # -----------------------------
 app.register_blueprint(identity_bp)
 app.register_blueprint(relay_bp)
@@ -54,7 +42,7 @@ def admin_dashboard():
     return render_template("admin.html")
 
 # -----------------------------
-# JSON STATUS
+# STATUS ENDPOINTS
 # -----------------------------
 @app.route("/status")
 def status():
@@ -95,12 +83,9 @@ def status_memory():
 # -----------------------------
 # ADMIN API
 # -----------------------------
-from logger import REQUEST_LOG
-
 @app.route("/api/logs")
 def get_logs():
     return jsonify(REQUEST_LOG)
-
 
 @app.route("/api/rate")
 def rate_status():
@@ -124,7 +109,7 @@ def server_error(e):
     return jsonify({"error": "Internal Server Error"}), 500
 
 # -----------------------------
-# MAIN
+# MAIN (LOCAL DEV ONLY)
 # -----------------------------
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
